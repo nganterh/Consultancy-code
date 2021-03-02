@@ -1,1 +1,6 @@
+bs4
+html5lib
+lxml
+openpyxl
+selenium
 streamlit

@@ -1,10 +1,16 @@
+from bs4 import BeautifulSoup
 from datetime import datetime
 import os
+import pandas as pd
 import pickle
 import re
+import requests
+from selenium import webdriver
+import time
 
 
 time_id = datetime.today().strftime('%Y%m%d')
+geckodriver_path = r'C:\Users\nicol\anaconda3\Library\bin\geckodriver'
 
 
 def check_files(dir_files, keyword):
@@ -58,3 +64,58 @@ def login(username, password, entry_type):
             pickle.dump(credentials, file)
         
         return 'User successfully registered!'
+    
+    
+def login_investing(path, username, password):
+    investing_url = 'https://www.investing.com/'
+    
+    browser = webdriver.Firefox(executable_path=geckodriver_path)
+    browser.get(investing_url)
+
+    browser.find_element_by_css_selector('.login').click()
+    browser.find_element_by_css_selector('#loginFormUser_email').send_keys(username)
+    browser.find_element_by_css_selector('#loginForm_password').send_keys(password)
+    browser.find_element_by_css_selector('#signup > a:nth-child(4)').click()
+    
+    return browser
+
+
+def get_inmutable(browser, country):
+    investing_url = 'https://www.investing.com'
+    df_main = pd.DataFrame()
+    list_urls = []
+    
+    browser.get(f'{investing_url}/stock-screener/?sp=country::' +
+                f'{country}|sector::a|industry::a|equityType::a%3Ceq_market_cap;1')
+    
+    while True:
+        time.sleep(5)
+
+        html = browser.page_source
+        soup = BeautifulSoup(html, 'lxml')
+
+        soup_table = soup.find('div', {'id':'resultsContainer'})
+        html_table = soup_table.prettify()
+
+        urls = [elem.a.get('href') for elem
+                in soup_table.find_all('td')
+                if (elem.a and elem.a.get('href')) != None]
+        
+        list_urls.extend(urls)
+        list_dfs = pd.read_html(html_table)
+        
+        for df in list_dfs:
+            df_main = df_main.append(df)
+            
+        try:        
+            browser.find_element_by_class_name('blueRightSideArrowPaginationIcon').click()
+        except:
+            break
+
+    df_main = df_main.reset_index(drop=True)
+
+    columns = [col for col in df_main]
+    df_main = df_main.drop([columns[0], columns[-1]], axis=1)
+    df_main['url'] = list_urls
+    
+    return df_main
